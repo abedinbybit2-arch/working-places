@@ -1,0 +1,71 @@
+:root {
+  color-scheme: dark;
+  --bg: #070b14;
+  --bg-elevated: #0d1424;
+  --bg-panel: rgba(15, 23, 42, 0.82);
+  --bg-soft: rgba(148, 163, 184, 0.08);
+  --border: rgba(148, 163, 184, 0.14);
+  --border-strong: rgba(148, 163, 184, 0.24);
+  --text: #e8eefc;
+  --text-muted: #93a4c3;
+  --text-dim: #6b7c9c;
+  --primary: #38bdf8;
+  --primary-2: #818cf8;
+  --success: #34d399;
+  --danger: #fb7185;
+  --tg: #2aabee;
+  --radius: 16px;
+  --shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+  --sidebar: 280px;
+  --sidebar-collapsed: 84px;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  color: var(--text);
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(56, 189, 248, 0.16), transparent 55%),
+    radial-gradient(900px 500px at 100% 0%, rgba(129, 140, 248, 0.14), transparent 50%),
+    radial-gradient(700px 400px at 80% 100%, rgba(42, 171, 238, 0.08), transparent 45%),
+    var(--bg);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+a {
+  color: var(--primary);
+}
+
+button {
+  cursor: pointer;
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
