@@ -213,6 +213,30 @@ async function persistSession() {
   localStorage.setItem(SESSION_KEY, session)
 }
 
+/**
+ * Ensure authorized client is connected, re-save the StringSession,
+ * and return the fresh GramJS session string (also stored in localStorage).
+ */
+export async function refreshAndExportSession(): Promise<string> {
+  const c = await getClient()
+  const ok = await c.checkAuthorization()
+  if (!ok) {
+    throw new Error('Not logged in. Open WP01 Telegram Workspace and sign in first.')
+  }
+  // Touch API so session is fully established
+  await c.getMe()
+  const session = c.session.save() as unknown as string
+  if (!session) {
+    throw new Error('Could not save session string from Telegram client')
+  }
+  localStorage.setItem(SESSION_KEY, session)
+  return session
+}
+
+export function hasStoredSession(): boolean {
+  return Boolean(getSessionString() && loadCreds()?.apiId)
+}
+
 export async function getMe() {
   const c = await getClient()
   return c.getMe()

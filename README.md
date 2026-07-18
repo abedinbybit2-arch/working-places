@@ -9,7 +9,18 @@ A modern multi-workspace web app with a collapsible sidebar and **10 Working Pla
 | 3 | **Temp Mail** — disposable inbox, persists after browser refresh | Live |
 | 4 | **Facebook Recovery** — official forgot-password guide (own account only) | Live |
 | 5 | **Bot Automation** — Telegram group custom auto-reply + Node worker | Live |
-| 6–10 | Security, Dev, Finance, CRM, Web | Coming soon |
+| 6 | **Session Extractor** — export own Telegram session (GramJS / Telethon / Pyrogram) | Live |
+| 7–10 | Dev, Finance, CRM, Web | Coming soon |
+
+### Session Extractor (WP06)
+
+Exports the session already signed in via **WP01** (browser `localStorage` only).
+
+1. Login on **WP01 · Telegram** with API ID/Hash from [my.telegram.org](https://my.telegram.org)
+2. Open **Session** (WP06) → confirm security warning → **Extract session**
+3. Copy or download **GramJS**, **Telethon**, and **Pyrogram** string sessions
+
+**Warning:** a session string is full account access. Never share it.
 
 ### Telegram bot auto-reply (WP05)
 

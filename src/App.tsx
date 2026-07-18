@@ -26,6 +26,12 @@ const TelegramBotAutomation = lazy(() =>
   import('./components/bot/TelegramBotAutomation').then((m) => ({ default: m.TelegramBotAutomation })),
 )
 
+const TelegramSessionExtract = lazy(() =>
+  import('./components/session/TelegramSessionExtract').then((m) => ({
+    default: m.TelegramSessionExtract,
+  })),
+)
+
 export default function App() {
   const [activeId, setActiveId] = useState(1)
   const [collapsed, setCollapsed] = useState(false)
@@ -134,6 +140,17 @@ export default function App() {
               }
             >
               <TelegramBotAutomation />
+            </Suspense>
+          ) : active.id === 6 ? (
+            <Suspense
+              fallback={
+                <div className="tg-center">
+                  <Loader2 className="spin" size={28} />
+                  <p>Loading Session Extractor…</p>
+                </div>
+              }
+            >
+              <TelegramSessionExtract />
             </Suspense>
           ) : (
             <ComingSoon workspace={active} />
