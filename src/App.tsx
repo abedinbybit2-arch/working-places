@@ -22,6 +22,10 @@ const FacebookRecovery = lazy(() =>
   import('./components/facebook/FacebookRecovery').then((m) => ({ default: m.FacebookRecovery })),
 )
 
+const TelegramBotAutomation = lazy(() =>
+  import('./components/bot/TelegramBotAutomation').then((m) => ({ default: m.TelegramBotAutomation })),
+)
+
 export default function App() {
   const [activeId, setActiveId] = useState(1)
   const [collapsed, setCollapsed] = useState(false)
@@ -119,6 +123,17 @@ export default function App() {
               }
             >
               <FacebookRecovery />
+            </Suspense>
+          ) : active.id === 5 ? (
+            <Suspense
+              fallback={
+                <div className="tg-center">
+                  <Loader2 className="spin" size={28} />
+                  <p>Loading Bot Automation…</p>
+                </div>
+              }
+            >
+              <TelegramBotAutomation />
             </Suspense>
           ) : (
             <ComingSoon workspace={active} />

@@ -8,7 +8,16 @@ A modern multi-workspace web app with a collapsible sidebar and **10 Working Pla
 | 2 | **World Cup Spot** — live scores, fixtures, table, official highlights | Live |
 | 3 | **Temp Mail** — disposable inbox, persists after browser refresh | Live |
 | 4 | **Facebook Recovery** — official forgot-password guide (own account only) | Live |
-| 5–10 | Cloud, Security, Dev, Finance, CRM, Web | Coming soon |
+| 5 | **Bot Automation** — Telegram group custom auto-reply + Node worker | Live |
+| 6–10 | Security, Dev, Finance, CRM, Web | Coming soon |
+
+### Telegram bot auto-reply (WP05)
+
+1. Create bot with [@BotFather](https://t.me/BotFather), copy token  
+2. Add bot to your group; `/setprivacy` → **Disable**  
+3. Open **Bot Auto** workspace → paste token → add keyword/reply rules → **Save**  
+4. **Export JSON** as `bot-config.json` in project root  
+5. Run worker: `npm run bot` (keep process running)
 
 ## Features
 

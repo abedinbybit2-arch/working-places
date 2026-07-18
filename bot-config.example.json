@@ -1,0 +1,21 @@
+{
+  "botToken": "123456:REPLACE_WITH_BOTFATHER_TOKEN",
+  "allowedChatIds": [],
+  "onlyGroups": true,
+  "replyToMessage": true,
+  "enabled": true,
+  "rules": [
+    {
+      "keyword": "hello",
+      "mode": "contains",
+      "reply": "Hi! This is an automated reply 👋",
+      "ignoreCase": true
+    },
+    {
+      "keyword": "price",
+      "mode": "contains",
+      "reply": "Please check the pinned message for prices.",
+      "ignoreCase": true
+    }
+  ]
+}

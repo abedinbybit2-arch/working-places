@@ -13,3 +13,4 @@ dist-ssr
 .env
 .env.*
 !.env.example
+bot-config.json
