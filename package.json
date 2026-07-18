@@ -12,6 +12,9 @@
     "bot:py": "python telegram-bot-worker/bot_link_guard.py"
   },
   "dependencies": {
+    "@ton/core": "^0.60.1",
+    "@ton/crypto": "^3.3.0",
+    "@ton/ton": "^15.3.0",
     "buffer": "^6.0.3",
     "events": "^3.3.0",
     "lucide-react": "^1.25.0",

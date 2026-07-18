@@ -14,7 +14,8 @@ const g = globalThis as typeof globalThis & {
 g.Buffer = Buffer
 g.global = globalThis
 if (!g.process) {
-  g.process = { env: {} }
+  // Minimal stub for GramJS / polyfills (full Node Process types not needed in browser)
+  g.process = { env: {} } as typeof g.process
 }
 
 createRoot(document.getElementById('root')!).render(

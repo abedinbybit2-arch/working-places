@@ -32,6 +32,10 @@ const TelegramSessionExtract = lazy(() =>
   })),
 )
 
+const TonWalletWorkspace = lazy(() =>
+  import('./components/ton/TonWalletWorkspace').then((m) => ({ default: m.TonWalletWorkspace })),
+)
+
 export default function App() {
   const [activeId, setActiveId] = useState(1)
   const [collapsed, setCollapsed] = useState(false)
@@ -151,6 +155,17 @@ export default function App() {
               }
             >
               <TelegramSessionExtract />
+            </Suspense>
+          ) : active.id === 7 ? (
+            <Suspense
+              fallback={
+                <div className="tg-center">
+                  <Loader2 className="spin" size={28} />
+                  <p>Loading TON Wallet…</p>
+                </div>
+              }
+            >
+              <TonWalletWorkspace />
             </Suspense>
           ) : (
             <ComingSoon workspace={active} />

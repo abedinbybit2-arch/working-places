@@ -10,7 +10,19 @@ A modern multi-workspace web app with a collapsible sidebar and **10 Working Pla
 | 4 | **Facebook Recovery** — official forgot-password guide (own account only) | Live |
 | 5 | **Bot Automation** — Telegram group custom auto-reply + Node worker | Live |
 | 6 | **Session Extractor** — export own Telegram session (GramJS / Telethon / Pyrogram) | Live |
-| 7–10 | Dev, Finance, CRM, Web | Coming soon |
+| 7 | **TON Wallet & Explorer** — create wallet, balances, jettons, tonviewer-style search | Live |
+| 8–10 | Finance, CRM, Web | Coming soon |
+
+### TON Wallet (WP07)
+
+Non-custodial TON wallet + explorer (TonAPI / tonviewer.com data):
+
+1. **Create / import** wallet (v4R2 or v5R1) — seed stays in your browser  
+2. **Balance** + **jettons** + **NFTs** + activity  
+3. **TON Search** — address, tx hash, jetton, NFT, `.ton` domain  
+4. Tokens market, NFT collections, DNS auctions, blocks, validators, address tools  
+
+API: [tonapi.io](https://tonapi.io) (same stack as [tonviewer.com](https://tonviewer.com))
 
 ### Session Extractor (WP06)
 

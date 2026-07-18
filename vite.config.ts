@@ -15,6 +15,35 @@ export default defineConfig({
       },
     }),
     {
+      name: 'tonapi-proxy',
+      configureServer(server) {
+        server.middlewares.use('/api/tonapi', async (req, res) => {
+          try {
+            const pathWithQuery = (req.url || '').replace(/^\/api\/tonapi/, '') || '/'
+            const target = `https://tonapi.io${pathWithQuery}`
+            const headers: Record<string, string> = { Accept: 'application/json' }
+            if (req.headers['authorization']) headers.Authorization = String(req.headers['authorization'])
+            const tgRes = await fetch(target, {
+              method: req.method || 'GET',
+              headers,
+            })
+            const body = await tgRes.arrayBuffer()
+            res.statusCode = tgRes.status
+            res.setHeader('Content-Type', tgRes.headers.get('content-type') || 'application/json')
+            res.end(Buffer.from(body))
+          } catch (e) {
+            res.statusCode = 502
+            res.setHeader('Content-Type', 'application/json')
+            res.end(
+              JSON.stringify({
+                error: e instanceof Error ? e.message : 'tonapi proxy error',
+              }),
+            )
+          }
+        })
+      },
+    },
+    {
       name: 'telegram-bot-api-proxy',
       configureServer(server) {
         server.middlewares.use('/api/telegram', (req, res, next) => {
