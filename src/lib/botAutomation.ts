@@ -2,15 +2,30 @@
 
 const STORAGE_KEY = 'wp_tg_bot_auto_v2'
 
-export type MatchMode = 'contains' | 'exact' | 'starts_with' | 'regex'
+export type MatchMode = 'contains' | 'exact' | 'starts_with' | 'regex' | 'link'
 
 export type AutoReplyRule = {
   id: string
   enabled: boolean
+  /** For link mode: optional domain filter (e.g. youtube.com). Empty = any link. */
   keyword: string
   mode: MatchMode
   reply: string
   ignoreCase: boolean
+}
+
+/** Detect http(s) / www links in a message */
+export function extractLinks(text: string): string[] {
+  if (!text) return []
+  const re =
+    /(?:https?:\/\/|www\.)[^\s<>"')\]]+/gi
+  const found = text.match(re) || []
+  // also bare domains with common TLDs if needed
+  return found.map((u) => u.replace(/[.,;:!?]+$/g, ''))
+}
+
+export function messageHasLink(text: string): boolean {
+  return extractLinks(text).length > 0
 }
 
 export type DetectedGroup = {
@@ -43,6 +58,14 @@ export function defaultConfig(): BotAutomationConfig {
     replyToMessage: true,
     replyAllGroups: true,
     rules: [
+      {
+        id: uid(),
+        enabled: true,
+        keyword: '',
+        mode: 'link',
+        reply: 'Links are not allowed here. Please read group rules.',
+        ignoreCase: true,
+      },
       {
         id: uid(),
         enabled: true,
@@ -172,7 +195,22 @@ export async function testBotToken(token: string) {
 }
 
 export function matchRule(text: string, rule: AutoReplyRule): boolean {
-  if (!rule.enabled || !rule.keyword.trim() || !rule.reply.trim()) return false
+  if (!rule.enabled || !rule.reply.trim()) return false
+
+  // Link detection mode — keyword optional (domain filter)
+  if (rule.mode === 'link') {
+    const links = extractLinks(text)
+    if (!links.length) return false
+    const filter = rule.keyword.trim()
+    if (!filter) return true // any link
+    const f = rule.ignoreCase ? filter.toLowerCase() : filter
+    return links.some((link) => {
+      const l = rule.ignoreCase ? link.toLowerCase() : link
+      return l.includes(f)
+    })
+  }
+
+  if (!rule.keyword.trim()) return false
   let msg = text
   let key = rule.keyword
   if (rule.ignoreCase) {

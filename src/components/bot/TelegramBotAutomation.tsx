@@ -490,10 +490,38 @@ export function TelegramBotAutomation() {
       <section className="ba-card">
         <div className="ba-card-head">
           <h3>Custom auto-reply rules</h3>
-          <button className="btn ghost" type="button" onClick={addRule}>
-            <Plus size={16} /> Add rule
-          </button>
+          <div className="ba-actions">
+            <button
+              className="btn ghost"
+              type="button"
+              onClick={() => {
+                commit({
+                  ...cfgRef.current,
+                  rules: [
+                    {
+                      id: `${Date.now().toString(36)}_link`,
+                      enabled: true,
+                      keyword: '',
+                      mode: 'link',
+                      reply: 'Links are not allowed. Please remove the link.',
+                      ignoreCase: true,
+                    },
+                    ...cfgRef.current.rules,
+                  ],
+                })
+              }}
+            >
+              + Link rule
+            </button>
+            <button className="btn ghost" type="button" onClick={addRule}>
+              <Plus size={16} /> Add rule
+            </button>
+          </div>
         </div>
+        <p className="ba-sub">
+          Use mode <strong>Link detect</strong> to reply when someone posts a URL. Set your custom
+          reply text. Optional domain filter (youtube.com, t.me, …).
+        </p>
         <div className="ba-rules">
           {cfg.rules.map((r, i) => (
             <div key={r.id} className={`ba-rule ${r.enabled ? '' : 'off'}`}>
@@ -511,6 +539,7 @@ export function TelegramBotAutomation() {
                   value={r.mode}
                   onChange={(e) => updateRule(r.id, { mode: e.target.value as MatchMode })}
                 >
+                  <option value="link">🔗 Link detect</option>
                   <option value="contains">Contains</option>
                   <option value="exact">Exact</option>
                   <option value="starts_with">Starts with</option>
@@ -529,21 +558,40 @@ export function TelegramBotAutomation() {
                 </button>
               </div>
               <label className="ba-field">
-                <span>When message matches</span>
+                <span>
+                  {r.mode === 'link'
+                    ? 'Domain filter (optional) — empty = ANY link'
+                    : 'When message matches'}
+                </span>
                 <input
                   value={r.keyword}
                   onChange={(e) => updateRule(r.id, { keyword: e.target.value })}
-                  placeholder="hello"
+                  placeholder={
+                    r.mode === 'link'
+                      ? 'e.g. youtube.com / t.me / leave empty for all links'
+                      : 'hello'
+                  }
                 />
               </label>
               <label className="ba-field">
-                <span>Bot replies</span>
+                <span>{r.mode === 'link' ? 'Reply when link is detected' : 'Bot replies'}</span>
                 <textarea
                   value={r.reply}
                   onChange={(e) => updateRule(r.id, { reply: e.target.value })}
                   rows={2}
+                  placeholder={
+                    r.mode === 'link'
+                      ? 'e.g. Please do not share links in this group.'
+                      : 'Auto reply text'
+                  }
                 />
               </label>
+              {r.mode === 'link' && (
+                <p className="ba-sub" style={{ margin: '0.25rem 0 0' }}>
+                  Detects http/https/www links. Optional filter: only reply if link contains that
+                  text (youtube.com, bit.ly, t.me…).
+                </p>
+              )}
             </div>
           ))}
         </div>
