@@ -367,20 +367,241 @@ export async function loadWorldCupSpot(): Promise<SpotBundle> {
   }
 }
 
-export const OFFICIAL_WATCH = [
+/**
+ * Official / public free (or freemium public-broadcaster) sources only.
+ * Viral X “free stream” lists mix pirate sites — those are intentionally excluded.
+ * Rights vary by territory; always check geo / account / licence rules.
+ */
+export type OfficialWatch = {
+  name: string
+  url: string
+  region: string
+  free: 'free' | 'free_with_account' | 'free_public_broadcast'
+  note: string
+}
+
+export const OFFICIAL_WATCH: OfficialWatch[] = [
+  // —— Global FIFA ——
   {
-    name: 'FIFA+ (official free)',
+    name: 'FIFA+',
     url: 'https://www.fifa.com/fifaplus',
-    note: 'Legal free highlights & select coverage',
+    region: 'Global',
+    free: 'free_with_account',
+    note: 'Official FIFA free platform — highlights, docs, and select live rights by territory',
+  },
+  {
+    name: 'FIFA+ Watch (hub)',
+    url: 'https://www.fifa.com/fifaplus/en/watch',
+    region: 'Global',
+    free: 'free_with_account',
+    note: 'Official FIFA+ video / live hub',
   },
   {
     name: 'FIFA YouTube',
     url: 'https://www.youtube.com/@FIFA',
-    note: 'Official highlights & live events when available',
+    region: 'Global',
+    free: 'free',
+    note: 'Official channel — goals, highlights, features',
   },
   {
-    name: 'YouTube Sports',
-    url: 'https://www.youtube.com/results?search_query=FIFA+World+Cup+official+highlights',
-    note: 'Search official highlight uploads',
+    name: 'FIFA World Cup YouTube',
+    url: 'https://www.youtube.com/@fifaworldcup',
+    region: 'Global',
+    free: 'free',
+    note: 'Official tournament channel',
   },
+  {
+    name: 'FIFA Media / News',
+    url: 'https://www.fifa.com/en',
+    region: 'Global',
+    free: 'free',
+    note: 'Official news, fixtures context, media',
+  },
+
+  // —— UK / Ireland (public free players; UK TV Licence may apply) ——
+  {
+    name: 'BBC iPlayer',
+    url: 'https://www.bbc.co.uk/iplayer',
+    region: 'UK',
+    free: 'free_public_broadcast',
+    note: 'UK public broadcaster free player (licence / geo rules apply)',
+  },
+  {
+    name: 'BBC Sport',
+    url: 'https://www.bbc.co.uk/sport/football/world-cup',
+    region: 'UK',
+    free: 'free',
+    note: 'Live text, clips, coverage pages',
+  },
+  {
+    name: 'ITVX',
+    url: 'https://www.itv.com/watch',
+    region: 'UK',
+    free: 'free_with_account',
+    note: 'UK free ad-supported player for rights they hold',
+  },
+  {
+    name: 'RTÉ Player',
+    url: 'https://www.rte.ie/player/',
+    region: 'Ireland',
+    free: 'free_public_broadcast',
+    note: 'Irish public free player',
+  },
+
+  // —— Germany / DACH ——
+  {
+    name: 'ARD Mediathek',
+    url: 'https://www.ardmediathek.de/',
+    region: 'Germany',
+    free: 'free_public_broadcast',
+    note: 'German public free catch-up / live when rights allow',
+  },
+  {
+    name: 'ZDF Mediathek',
+    url: 'https://www.zdf.de/live-tv',
+    region: 'Germany',
+    free: 'free_public_broadcast',
+    note: 'German public free live & VOD',
+  },
+  {
+    name: 'SRF Play',
+    url: 'https://www.srf.ch/play',
+    region: 'Switzerland',
+    free: 'free_public_broadcast',
+    note: 'Swiss public free player (DE)',
+  },
+  {
+    name: 'RTS Play',
+    url: 'https://www.rts.ch/play/',
+    region: 'Switzerland',
+    free: 'free_public_broadcast',
+    note: 'Swiss public free player (FR)',
+  },
+  {
+    name: 'RSI Play',
+    url: 'https://www.rsi.ch/play/',
+    region: 'Switzerland',
+    free: 'free_public_broadcast',
+    note: 'Swiss public free player (IT)',
+  },
+
+  // —— Europe public ——
+  {
+    name: 'RaiPlay',
+    url: 'https://www.raiplay.it/',
+    region: 'Italy',
+    free: 'free_public_broadcast',
+    note: 'Italian public free player',
+  },
+  {
+    name: 'NOS',
+    url: 'https://nos.nl/',
+    region: 'Netherlands',
+    free: 'free_public_broadcast',
+    note: 'Dutch public sports coverage / streams when rights allow',
+  },
+  {
+    name: 'VRT MAX',
+    url: 'https://www.vrt.be/vrtmax/',
+    region: 'Belgium',
+    free: 'free_public_broadcast',
+    note: 'Belgian (Flanders) free public player',
+  },
+  {
+    name: 'RTBF Auvio',
+    url: 'https://www.rtbf.be/auvio',
+    region: 'Belgium',
+    free: 'free_public_broadcast',
+    note: 'Belgian (Wallonia) free public player',
+  },
+  {
+    name: 'TRT İzle',
+    url: 'https://www.trtizle.com/',
+    region: 'Türkiye',
+    free: 'free_public_broadcast',
+    note: 'Turkish public free player when TRT holds rights',
+  },
+
+  // —— Americas ——
+  {
+    name: 'CazéTV (YouTube)',
+    url: 'https://www.youtube.com/@CazeTV',
+    region: 'Brazil',
+    free: 'free',
+    note: 'Major free YouTube sports channel — check live rights per match',
+  },
+  {
+    name: 'YouTube Live sports',
+    url: 'https://www.youtube.com/channel/UCEg25rdRZXg32vgopAd8lLw/live',
+    region: 'Global',
+    free: 'free',
+    note: 'YouTube sports live hub (only official rights holders appear live)',
+  },
+
+  // —— Africa ——
+  {
+    name: 'SportyTV YouTube',
+    url: 'https://www.youtube.com/@SportyTV',
+    region: 'Africa',
+    free: 'free_with_account',
+    note: 'African free/freemium sports YouTube presence — match rights vary',
+  },
+  {
+    name: 'SABC+',
+    url: 'https://www.sabcplus.com/',
+    region: 'South Africa',
+    free: 'free_with_account',
+    note: 'SA free/public digital platform when SABC has rights',
+  },
+
+  // —— Asia-Pacific ——
+  {
+    name: 'SBS On Demand',
+    url: 'https://www.sbs.com.au/ondemand/',
+    region: 'Australia',
+    free: 'free_with_account',
+    note: 'Australian free broadcaster on-demand / live',
+  },
+  {
+    name: 'TVNZ+',
+    url: 'https://www.tvnz.co.nz/',
+    region: 'New Zealand',
+    free: 'free_with_account',
+    note: 'NZ free broadcaster digital player',
+  },
+  {
+    name: 'JioHotstar',
+    url: 'https://www.hotstar.com/',
+    region: 'India',
+    free: 'free_with_account',
+    note: 'Official India digital rights holder — free tier / ads when offered',
+  },
+
+  // —— Clips / non full-match free ——
+  {
+    name: 'Official highlights search',
+    url: 'https://www.youtube.com/results?search_query=FIFA+World+Cup+official+highlights',
+    region: 'Global',
+    free: 'free',
+    note: 'Filter for official FIFA / broadcaster uploads only',
+  },
+]
+
+export const OFFICIAL_REGIONS = [
+  'All',
+  'Global',
+  'UK',
+  'Ireland',
+  'Germany',
+  'Switzerland',
+  'Italy',
+  'Netherlands',
+  'Belgium',
+  'Türkiye',
+  'Brazil',
+  'Africa',
+  'South Africa',
+  'Australia',
+  'New Zealand',
+  'India',
 ] as const

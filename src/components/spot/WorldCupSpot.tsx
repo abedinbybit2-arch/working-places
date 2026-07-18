@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import {
   loadWorldCupSpot,
+  OFFICIAL_REGIONS,
   OFFICIAL_WATCH,
   type SpotBundle,
   type WcMatch,
@@ -67,6 +68,7 @@ export function WorldCupSpot() {
   const [error, setError] = useState('')
   const [activeVideo, setActiveVideo] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
+  const [region, setRegion] = useState<(typeof OFFICIAL_REGIONS)[number]>('All')
 
   const refresh = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
@@ -101,6 +103,8 @@ export function WorldCupSpot() {
   const recent = data?.recent || []
   const standings = data?.standings || []
   const highlights = data?.highlights || []
+  const officialList =
+    region === 'All' ? OFFICIAL_WATCH : OFFICIAL_WATCH.filter((o) => o.region === region)
 
   return (
     <div className="wc-spot">
@@ -242,16 +246,40 @@ export function WorldCupSpot() {
           <section className="wc-section">
             <div className="wc-section-head">
               <h3>
-                <ExternalLink size={16} /> Official free watch
+                <ExternalLink size={16} /> Official free sources ({OFFICIAL_WATCH.length})
               </h3>
             </div>
+            <p className="wc-official-note">
+              Researched from FIFA / public broadcasters. Viral X “free stream” lists mix{' '}
+              <strong>pirate sites</strong> (Footybite, Koralive, Vipbox, etc.) — those are blocked here.
+              Only official / public free platforms. Rights differ by country.
+            </p>
+            <div className="wc-region-bar">
+              {OFFICIAL_REGIONS.map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  className={`wc-region-chip ${region === r ? 'is-on' : ''}`}
+                  onClick={() => setRegion(r)}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
             <div className="wc-official-grid">
-              {OFFICIAL_WATCH.map((o) => (
+              {officialList.map((o) => (
                 <a key={o.url} className="wc-official" href={o.url} target="_blank" rel="noreferrer">
-                  <strong>{o.name}</strong>
+                  <div className="wc-official-top">
+                    <strong>{o.name}</strong>
+                    <span className="wc-region-tag">{o.region}</span>
+                  </div>
+                  <em className={`wc-free-tag ${o.free}`}>{o.free.split('_').join(' ')}</em>
                   <span>{o.note}</span>
                 </a>
               ))}
+              {officialList.length === 0 && (
+                <div className="wc-empty">No sources for this region filter.</div>
+              )}
             </div>
           </section>
 
