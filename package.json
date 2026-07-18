@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "bot": "node telegram-bot-worker/index.mjs"
+    "bot": "node telegram-bot-worker/index.mjs",
+    "bot:py": "python telegram-bot-worker/bot_link_guard.py"
   },
   "dependencies": {
     "buffer": "^6.0.3",

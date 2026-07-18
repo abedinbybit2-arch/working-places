@@ -14,6 +14,8 @@ import {
 } from 'lucide-react'
 import {
   callTelegram,
+  entitiesHaveLink,
+  extractLinks,
   isGroupChat,
   loadBotConfig,
   matchRule,
@@ -37,6 +39,8 @@ type TgMessage = {
   message_id: number
   text?: string
   caption?: string
+  entities?: { type?: string }[]
+  caption_entities?: { type?: string }[]
   from?: { is_bot?: boolean; username?: string; first_name?: string }
   chat?: TgChat
 }
@@ -204,33 +208,60 @@ export function TelegramBotAutomation() {
       const chatId = String(chat.id)
       log(`Msg in ${chat.title || chatId}: ${text.slice(0, 60)}`, 'info')
 
-      // Sync read of config after commit
       c = cfgRef.current
       if (!shouldReplyInGroup(c, chatId)) {
-        log(`Skip — group ${chatId} not enabled (turn on “ALL groups” or enable checkbox)`, 'err')
+        log(`Skip — group ${chatId} not enabled`, 'err')
         return
       }
 
-      let matched = false
-      for (const rule of c.rules) {
-        if (!matchRule(text, rule)) continue
-        matched = true
-        const params: Record<string, unknown> = {
-          chat_id: chat.id,
-          text: rule.reply,
-        }
-        if (c.replyToMessage) params.reply_to_message_id = msg.message_id
-        try {
-          await callTelegram(c.botToken, 'sendMessage', params)
-          statsRef.current.replies += 1
-          log(`✅ Replied in "${chat.title || chatId}" (rule: ${rule.keyword})`, 'ok')
-        } catch (e) {
-          log(`Send failed: ${e instanceof Error ? e.message : String(e)}`, 'err')
-        }
-        break
+      // Instant link check (anti-bypass + Telegram entities)
+      const entityLink = entitiesHaveLink(msg.entities) || entitiesHaveLink(msg.caption_entities)
+      const links = extractLinks(text)
+      const hasLink = entityLink || links.length > 0
+      if (hasLink) {
+        log(`🔗 Link check: ${links.join(', ') || 'entity url/text_link'}`, 'ok')
       }
-      if (!matched) {
+
+      let replyText: string | null = null
+      let reason = ''
+
+      if (c.linkEnabled && hasLink) {
+        const filt = (c.linkFilter || '').trim().toLowerCase()
+        const passFilter =
+          !filt ||
+          links.some((l) => l.toLowerCase().includes(filt)) ||
+          (entityLink && !filt)
+        if (passFilter) {
+          replyText = c.linkReply || 'Link not allowed.'
+          reason = 'global-link-guard'
+        }
+      }
+
+      if (!replyText) {
+        for (const rule of c.rules) {
+          if (!matchRule(text, rule)) continue
+          replyText = rule.reply
+          reason = rule.mode === 'link' ? `link-rule:${rule.keyword || 'any'}` : `rule:${rule.keyword}`
+          break
+        }
+      }
+
+      if (!replyText) {
         log(`No rule matched for: ${text.slice(0, 40)}`, 'info')
+        return
+      }
+
+      const params: Record<string, unknown> = {
+        chat_id: chat.id,
+        text: replyText,
+      }
+      if (c.replyToMessage) params.reply_to_message_id = msg.message_id
+      try {
+        await callTelegram(c.botToken, 'sendMessage', params)
+        statsRef.current.replies += 1
+        log(`✅ Replied in "${chat.title || chatId}" (${reason})`, 'ok')
+      } catch (e) {
+        log(`Send failed: ${e instanceof Error ? e.message : String(e)}`, 'err')
       }
     },
     [log],
@@ -430,6 +461,41 @@ export function TelegramBotAutomation() {
           {busy ? <Loader2 className="spin" size={16} /> : <CheckCircle2 size={16} />}
           Test / connect bot
         </button>
+      </section>
+
+      <section className="ba-card">
+        <div className="ba-card-head">
+          <h3>🔗 Instant link guard (anti-bypass)</h3>
+          <label className="ba-switch">
+            <input
+              type="checkbox"
+              checked={cfg.linkEnabled !== false}
+              onChange={(e) => update({ linkEnabled: e.target.checked })}
+            />
+            {cfg.linkEnabled !== false ? 'ON' : 'OFF'}
+          </label>
+        </div>
+        <p className="ba-sub">
+          Message আসার সাথে সাথে link check। Bypass try (space, [dot], hxxp, t.me, bare domain) +
+          Telegram url entities ধরা হয়। Python: <code>npm run bot:py</code>
+        </p>
+        <label className="ba-field">
+          <span>Reply when any link detected</span>
+          <textarea
+            value={cfg.linkReply || ''}
+            onChange={(e) => update({ linkReply: e.target.value })}
+            rows={2}
+            placeholder="⚠️ Link detected. Not allowed."
+          />
+        </label>
+        <label className="ba-field">
+          <span>Only these domains (optional) — empty = ALL links</span>
+          <input
+            value={cfg.linkFilter || ''}
+            onChange={(e) => update({ linkFilter: e.target.value })}
+            placeholder="e.g. youtube.com or t.me — leave empty for every link"
+          />
+        </label>
       </section>
 
       <section className="ba-card">

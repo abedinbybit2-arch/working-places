@@ -3,19 +3,25 @@
   "allowedChatIds": [],
   "onlyGroups": true,
   "replyToMessage": true,
+  "replyAllGroups": true,
   "enabled": true,
+  "linkEnabled": true,
+  "linkReply": "⚠️ Link detected. Links are not allowed in this group.",
+  "linkFilter": "",
   "rules": [
+    {
+      "keyword": "",
+      "mode": "link",
+      "reply": "Please do not share links.",
+      "ignoreCase": true,
+      "enabled": true
+    },
     {
       "keyword": "hello",
       "mode": "contains",
       "reply": "Hi! This is an automated reply 👋",
-      "ignoreCase": true
-    },
-    {
-      "keyword": "price",
-      "mode": "contains",
-      "reply": "Please check the pinned message for prices.",
-      "ignoreCase": true
+      "ignoreCase": true,
+      "enabled": true
     }
   ]
 }

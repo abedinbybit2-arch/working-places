@@ -14,18 +14,70 @@ export type AutoReplyRule = {
   ignoreCase: boolean
 }
 
-/** Detect http(s) / www links in a message */
+/** Strip zero-width / bidi chars used to bypass filters */
+function stripInvisible(text: string): string {
+  return text.replace(/[\u200b\u200c\u200d\u2060\ufeff\u00ad\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '')
+}
+
+/** Anti-bypass normalize: spaces, [dot], hxxp, unicode dots, etc. */
+export function denoiseForLinks(text: string): string {
+  let t = stripInvisible(text || '')
+  t = t.normalize('NFKC')
+  t = t.replace(/[。．｡·•‧∙⋅﹒․۔]/g, '.')
+  // collapse "h t t p s : / /" and "y o u . c o m"
+  t = t.replace(/(?<=[A-Za-z0-9])\s+(?=[A-Za-z0-9./:_-])/g, '')
+  t = t.replace(/h\s*x+\s*x+\s*p\s*s?/gi, 'http')
+  t = t.replace(/\[\s*dot\s*\]|\(\s*dot\s*\)|\{\s*dot\s\}|\s+dot\s+/gi, '.')
+  t = t.replace(/\[\s*\.\s*\]|\(\s*\.\s*\)/g, '.')
+  t = t.replace(/\s*\.\s*/g, '.')
+  t = t.replace(/\s*\/\s*/g, '/')
+  t = t.replace(/\s*:\s*/g, ':')
+  return t
+}
+
+/** Aggressive link extract (bypass-resistant) */
 export function extractLinks(text: string): string[] {
   if (!text) return []
-  const re =
-    /(?:https?:\/\/|www\.)[^\s<>"')\]]+/gi
-  const found = text.match(re) || []
-  // also bare domains with common TLDs if needed
-  return found.map((u) => u.replace(/[.,;:!?]+$/g, ''))
+  const found: string[] = []
+  const add = (u?: string) => {
+    if (!u) return
+    const clean = u.replace(/[.,;:!?)\]]+$/g, '').trim()
+    if (clean && !found.includes(clean)) found.push(clean)
+  }
+
+  const variants = [text, stripInvisible(text), denoiseForLinks(text)]
+  const patterns = [
+    /(?:https?|ftp|hxxp|hxxps|tg|ton):\/\/[^\s<>"']+/gi,
+    /www\.[a-z0-9][^\s<>"']*/gi,
+    /(?:t\.me|telegram\.me|telegram\.dog)\/[^\s<>"']+/gi,
+    /\b(?:bit\.ly|tinyurl\.com|t\.co|goo\.gl|cutt\.ly|is\.gd)\/[^\s<>"']+/gi,
+    /\b\d{1,3}(?:\.\d{1,3}){3}(?::\d{2,5})?(?:\/[^\s]*)?/g,
+    /\b[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){1,6}(?::\d{2,5})?(?:\/[^\s]*)?/gi,
+  ]
+
+  for (const v of variants) {
+    for (const re of patterns) {
+      const m = v.match(re)
+      if (m) m.forEach(add)
+    }
+    if (/(?:joinchat|\+[a-z0-9_-]{8,}|tg:\/\/join)/i.test(v)) {
+      const inv = v.match(/(?:joinchat\/[^\s]+|\+[a-z0-9_-]{8,}|tg:\/\/join\?[^\s]+)/i)
+      if (inv) add(inv[0])
+    }
+  }
+  return found
 }
 
 export function messageHasLink(text: string): boolean {
   return extractLinks(text).length > 0
+}
+
+/** Telegram message entities (url / text_link) — hard to fully bypass on official clients */
+export function entitiesHaveLink(
+  entities?: { type?: string }[] | null,
+): boolean {
+  if (!entities?.length) return false
+  return entities.some((e) => e.type === 'url' || e.type === 'text_link')
 }
 
 export type DetectedGroup = {
@@ -45,6 +97,11 @@ export type BotAutomationConfig = {
   replyToMessage: boolean
   /** if true, reply in every group the bot sees */
   replyAllGroups: boolean
+  /** Global instant link guard (Python-style check in browser too) */
+  linkEnabled: boolean
+  linkReply: string
+  /** optional domain filter for global guard; empty = any link */
+  linkFilter: string
   rules: AutoReplyRule[]
   groups: DetectedGroup[]
   updatedAt: number
@@ -57,6 +114,9 @@ export function defaultConfig(): BotAutomationConfig {
     onlyGroups: true,
     replyToMessage: true,
     replyAllGroups: true,
+    linkEnabled: true,
+    linkReply: '⚠️ Link detected. Links are not allowed in this group.',
+    linkFilter: '',
     rules: [
       {
         id: uid(),
@@ -197,12 +257,12 @@ export async function testBotToken(token: string) {
 export function matchRule(text: string, rule: AutoReplyRule): boolean {
   if (!rule.enabled || !rule.reply.trim()) return false
 
-  // Link detection mode — keyword optional (domain filter)
+  // Link detection mode — keyword optional (domain filter); anti-bypass extract
   if (rule.mode === 'link') {
     const links = extractLinks(text)
     if (!links.length) return false
     const filter = rule.keyword.trim()
-    if (!filter) return true // any link
+    if (!filter) return true
     const f = rule.ignoreCase ? filter.toLowerCase() : filter
     return links.some((link) => {
       const l = rule.ignoreCase ? link.toLowerCase() : link
