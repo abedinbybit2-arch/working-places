@@ -61,11 +61,18 @@ import {
 } from '../../lib/tonApi'
 import {
   createWallet,
+  createWalletsBulk,
   deleteWallet,
   displayAddress,
+  downloadText,
+  exportWalletsCsv,
   getMnemonic,
   importWallet,
   listWallets,
+  MAX_BULK_CREATE,
+  MAX_WALLETS_TOTAL,
+  remainingWalletSlots,
+  walletCount,
   type PublicWallet,
 } from '../../lib/tonWallet'
 import './TonWalletWorkspace.css'
@@ -136,6 +143,12 @@ export function TonWalletWorkspace() {
   const [importText, setImportText] = useState('')
   const [walletVersion, setWalletVersion] = useState<'v4r2' | 'v5r1'>('v4r2')
   const [ackSeed, setAckSeed] = useState(false)
+  const [bulkOpen, setBulkOpen] = useState(false)
+  const [bulkCount, setBulkCount] = useState(10)
+  const [bulkPrefix, setBulkPrefix] = useState('Bulk')
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null)
+  const slotsLeft = remainingWalletSlots()
+  const totalWallets = walletCount()
 
   // Search / explorer
   const [query, setQuery] = useState('')
@@ -268,6 +281,75 @@ export function TonWalletWorkspace() {
     } finally {
       setBusy(false)
     }
+  }
+
+  async function handleBulkCreate() {
+    if (!ackSeed) {
+      setError('Confirm you will back up all seed phrases (download CSV) before bulk create.')
+      return
+    }
+    const n = Math.floor(Number(bulkCount) || 0)
+    if (n < 1) {
+      setError('Enter a number between 1 and 100')
+      return
+    }
+    if (n > MAX_BULK_CREATE) {
+      setError(`Max ${MAX_BULK_CREATE} wallets per bulk run`)
+      return
+    }
+    if (slotsLeft < 1) {
+      setError(`Total limit ${MAX_WALLETS_TOTAL} reached. Delete some wallets first.`)
+      return
+    }
+    const willCreate = Math.min(n, slotsLeft, MAX_BULK_CREATE)
+    if (willCreate < n) {
+      if (
+        !confirm(
+          `Only ${willCreate} slots left (total max ${MAX_WALLETS_TOTAL}). Create ${willCreate} wallets?`,
+        )
+      ) {
+        return
+      }
+    }
+
+    setBusy(true)
+    setError('')
+    setBulkProgress({ done: 0, total: willCreate })
+    try {
+      const created = await createWalletsBulk({
+        count: willCreate,
+        version: walletVersion,
+        labelPrefix: bulkPrefix || 'Bulk',
+        onProgress: (done, total) => setBulkProgress({ done, total }),
+      })
+      refreshWallets()
+      if (created[0]) setActiveId(created[0].id)
+      // Auto-download CSV of this batch (seeds included)
+      const csv = exportWalletsCsv(created)
+      downloadText(
+        `ton-bulk-wallets-${created.length}-${Date.now()}.csv`,
+        csv,
+      )
+      setBulkOpen(false)
+      setShowSeed(false)
+      setSeedWords(null)
+      notify(`${created.length} wallets created · CSV downloaded (KEEP PRIVATE)`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+      setBulkProgress(null)
+    }
+  }
+
+  function handleExportAll() {
+    if (walletCount() < 1) {
+      setError('No wallets to export')
+      return
+    }
+    if (!confirm('Export ALL wallets including seed phrases as CSV? Keep the file private.')) return
+    downloadText(`ton-all-wallets-${walletCount()}-${Date.now()}.csv`, exportWalletsCsv())
+    notify('All wallets exported (private CSV)')
   }
 
   async function handleImport() {
@@ -519,21 +601,149 @@ export function TonWalletWorkspace() {
                   <option value="v4r2">Wallet v4R2</option>
                   <option value="v5r1">Wallet v5R1</option>
                 </select>
-                <button type="button" className="ton-btn primary sm" onClick={() => void handleCreate()} disabled={busy}>
+                <button type="button" className="ton-btn primary sm" onClick={() => void handleCreate()} disabled={busy || slotsLeft < 1}>
                   <Plus size={14} /> Create
                 </button>
-                <button type="button" className="ton-btn ghost sm" onClick={() => setImportOpen((v) => !v)}>
+                <button
+                  type="button"
+                  className="ton-btn ghost sm"
+                  onClick={() => {
+                    setBulkOpen((v) => !v)
+                    setImportOpen(false)
+                  }}
+                  disabled={busy || slotsLeft < 1}
+                >
+                  Bulk
+                </button>
+                <button
+                  type="button"
+                  className="ton-btn ghost sm"
+                  onClick={() => {
+                    setImportOpen((v) => !v)
+                    setBulkOpen(false)
+                  }}
+                >
                   Import
                 </button>
+                <button type="button" className="ton-btn ghost sm" onClick={handleExportAll} disabled={totalWallets < 1}>
+                  <Download size={14} /> Export all
+                </button>
+              </div>
+            </div>
+
+            <div className="ton-limit-bar">
+              <div className="ton-limit-meta">
+                <span>
+                  Stored <strong>{totalWallets}</strong> / {MAX_WALLETS_TOTAL}
+                </span>
+                <span>
+                  Free slots <strong>{slotsLeft}</strong>
+                </span>
+                <span>
+                  Bulk max / run <strong>{MAX_BULK_CREATE}</strong>
+                </span>
+              </div>
+              <div className="ton-limit-track" aria-hidden>
+                <div
+                  className="ton-limit-fill"
+                  style={{ width: `${Math.min(100, (totalWallets / MAX_WALLETS_TOTAL) * 100)}%` }}
+                />
               </div>
             </div>
 
             <label className="ton-ack">
               <input type="checkbox" checked={ackSeed} onChange={(e) => setAckSeed(e.target.checked)} />
               <span>
-                I will save the 24-word seed offline. Lost seed = lost funds. Keys never leave this browser.
+                I will save all seed phrases offline (CSV download). Lost seed = lost funds. Keys never leave this
+                browser.
               </span>
             </label>
+
+            {bulkOpen ? (
+              <div className="ton-bulk">
+                <div className="ton-bulk-row">
+                  <label>
+                    <span>How many (1–{MAX_BULK_CREATE})</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={MAX_BULK_CREATE}
+                      value={bulkCount}
+                      onChange={(e) => setBulkCount(Number(e.target.value))}
+                      disabled={busy}
+                    />
+                  </label>
+                  <label>
+                    <span>Label prefix</span>
+                    <input
+                      type="text"
+                      value={bulkPrefix}
+                      onChange={(e) => setBulkPrefix(e.target.value)}
+                      placeholder="Bulk"
+                      disabled={busy}
+                    />
+                  </label>
+                </div>
+                <p className="ton-muted ton-bulk-hint">
+                  Will create up to <strong>{Math.min(bulkCount || 0, MAX_BULK_CREATE, slotsLeft)}</strong> wallets
+                  now (room left: {slotsLeft}). CSV with seeds auto-downloads when done.
+                </p>
+                {bulkProgress ? (
+                  <div className="ton-bulk-progress">
+                    <div className="ton-limit-track">
+                      <div
+                        className="ton-limit-fill bulk"
+                        style={{
+                          width: `${Math.min(100, (bulkProgress.done / Math.max(1, bulkProgress.total)) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                    <span>
+                      Creating {bulkProgress.done} / {bulkProgress.total}…
+                    </span>
+                  </div>
+                ) : null}
+                <div className="ton-row">
+                  <button
+                    type="button"
+                    className="ton-btn primary sm"
+                    onClick={() => void handleBulkCreate()}
+                    disabled={busy || slotsLeft < 1 || !ackSeed}
+                  >
+                    {busy && bulkProgress ? (
+                      <Loader2 className="spin" size={14} />
+                    ) : (
+                      <Plus size={14} />
+                    )}
+                    Bulk create
+                  </button>
+                  <button
+                    type="button"
+                    className="ton-btn ghost sm"
+                    onClick={() => setBulkCount(10)}
+                    disabled={busy}
+                  >
+                    10
+                  </button>
+                  <button
+                    type="button"
+                    className="ton-btn ghost sm"
+                    onClick={() => setBulkCount(50)}
+                    disabled={busy}
+                  >
+                    50
+                  </button>
+                  <button
+                    type="button"
+                    className="ton-btn ghost sm"
+                    onClick={() => setBulkCount(100)}
+                    disabled={busy}
+                  >
+                    100
+                  </button>
+                </div>
+              </div>
+            ) : null}
 
             {importOpen ? (
               <div className="ton-import">
@@ -551,7 +761,7 @@ export function TonWalletWorkspace() {
             ) : null}
 
             {wallets.length === 0 ? (
-              <p className="ton-muted">No wallet yet — create or import one.</p>
+              <p className="ton-muted">No wallet yet — create one, bulk create, or import.</p>
             ) : (
               <div className="ton-wallet-list">
                 {wallets.map((w) => (
