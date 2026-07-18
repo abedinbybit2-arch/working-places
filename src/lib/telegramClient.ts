@@ -69,9 +69,15 @@ export async function getClient(): Promise<TelegramClient> {
   if (client) return client
 
   const session = new StringSession(getSessionString())
+  // Browser: never let GramJS call node:os (os.default.type is not a function in Vite)
   client = new TelegramClient(session, creds.apiId, creds.apiHash, {
     connectionRetries: 5,
     useWSS: true,
+    deviceModel: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 32) : 'Working Places Web',
+    systemVersion: 'Web',
+    appVersion: '1.0.0',
+    langCode: 'en',
+    systemLangCode: typeof navigator !== 'undefined' ? navigator.language || 'en' : 'en',
   })
   await client.connect()
   return client

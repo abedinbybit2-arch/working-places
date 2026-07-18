@@ -31,6 +31,19 @@ import {
 
 type Step = 'loading' | 'credentials' | 'phone' | 'code' | 'password' | 'app'
 
+function friendlyError(err: unknown) {
+  const raw = err instanceof Error ? err.message : String(err)
+  if (raw.includes('type is not a function') || raw.includes('os.default')) {
+    return 'Browser Telegram client init failed. Hard-refresh (Ctrl+F5) and try again.'
+  }
+  if (raw.includes('API_ID_INVALID')) return 'Invalid API ID. Check my.telegram.org values.'
+  if (raw.includes('PHONE_NUMBER_INVALID')) return 'Invalid phone number. Use international format e.g. +8801...'
+  if (raw.includes('PHONE_CODE_INVALID')) return 'Invalid login code. Request a new code and try again.'
+  if (raw.includes('PASSWORD_HASH_INVALID')) return 'Wrong two-step password.'
+  if (raw.includes('FLOOD')) return 'Too many attempts. Wait a few minutes and try again.'
+  return raw
+}
+
 export function TelegramWorkspace() {
   const saved = useMemo(() => getSavedCreds(), [])
   const [step, setStep] = useState<Step>('loading')
@@ -73,7 +86,7 @@ export function TelegramWorkspace() {
       setDialogs(list)
       setStep('app')
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(friendlyError(e))
       setStep(creds ? 'phone' : 'credentials')
     } finally {
       setBusy(false)
@@ -110,7 +123,7 @@ export function TelegramWorkspace() {
       await sendPhoneCode(phone.trim())
       setStep('code')
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(friendlyError(err))
     } finally {
       setBusy(false)
     }
@@ -128,7 +141,7 @@ export function TelegramWorkspace() {
       }
       await boot()
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(friendlyError(err))
     } finally {
       setBusy(false)
     }
@@ -142,7 +155,7 @@ export function TelegramWorkspace() {
       await signInWithPassword(password)
       await boot()
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(friendlyError(err))
     } finally {
       setBusy(false)
     }
@@ -156,7 +169,7 @@ export function TelegramWorkspace() {
       const msgs = await getMessages(dialog.entity, 50)
       setMessages(msgs)
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(friendlyError(err))
     } finally {
       setMsgLoading(false)
     }
@@ -173,7 +186,7 @@ export function TelegramWorkspace() {
       const msgs = await getMessages(active.entity, 50)
       setMessages(msgs)
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(friendlyError(err))
     } finally {
       setBusy(false)
     }
