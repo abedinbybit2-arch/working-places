@@ -708,12 +708,65 @@
   padding: 0.9rem 1rem;
   border-bottom: 1px solid var(--border);
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.tg-chat-head > div {
+  display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .tg-chat-head span {
   font-size: 0.78rem;
   color: var(--text-dim);
+}
+
+.tg-send-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.tg-send-badge.can {
+  color: #6ee7b7;
+  background: rgba(52, 211, 153, 0.12);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+}
+
+.tg-send-badge.no {
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.1);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.tg-readonly-bar {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.95rem 1rem;
+  border-top: 1px solid var(--border);
+  background: rgba(148, 163, 184, 0.06);
+  color: var(--text-muted);
+}
+
+.tg-readonly-bar strong {
+  display: block;
+  color: var(--text);
+  font-size: 0.88rem;
+  margin-bottom: 0.15rem;
+}
+
+.tg-readonly-bar p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  line-height: 1.4;
 }
 
 .tg-messages {

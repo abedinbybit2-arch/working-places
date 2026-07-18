@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   KeyRound,
   Loader2,
+  Lock,
   LogOut,
   MessageSquare,
   Phone,
@@ -178,6 +179,10 @@ export function TelegramWorkspace() {
   async function handleSend(e: React.FormEvent) {
     e.preventDefault()
     if (!active || !draft.trim()) return
+    if (!active.canSend) {
+      setError(active.sendBlockedReason || 'No permission to send in this chat')
+      return
+    }
     setBusy(true)
     setError('')
     try {
@@ -382,9 +387,19 @@ export function TelegramWorkspace() {
                   <strong>{d.title}</strong>
                   <span>
                     {d.isUser ? 'User' : d.isChannel ? 'Channel' : 'Group'}
+                    {d.canSend ? ' · Can send' : ' · Read only'}
                     {d.unread > 0 ? ` · ${d.unread} unread` : ''}
                   </span>
                 </div>
+                {d.canSend ? (
+                  <span className="tg-send-badge can" title="You can send messages">
+                    <Send size={12} />
+                  </span>
+                ) : (
+                  <span className="tg-send-badge no" title="No send permission">
+                    <Lock size={12} />
+                  </span>
+                )}
               </button>
             ))}
             {dialogs.length === 0 && <p className="empty">No chats found.</p>}
@@ -400,8 +415,22 @@ export function TelegramWorkspace() {
           ) : (
             <>
               <div className="tg-chat-head">
-                <strong>{active.title}</strong>
-                <span>{active.isUser ? 'Private chat' : active.isChannel ? 'Channel' : 'Group'}</span>
+                <div>
+                  <strong>{active.title}</strong>
+                  <span>
+                    {active.isUser ? 'Private chat' : active.isChannel ? 'Channel' : 'Group'}
+                    {active.canSend ? ' · Send allowed' : ' · Read only'}
+                  </span>
+                </div>
+                {active.canSend ? (
+                  <span className="status-chip live">
+                    <Send size={12} /> Can send
+                  </span>
+                ) : (
+                  <span className="status-chip">
+                    <Lock size={12} /> No send
+                  </span>
+                )}
               </div>
               <div className="tg-messages" ref={scroller}>
                 {msgLoading && (
@@ -427,17 +456,28 @@ export function TelegramWorkspace() {
                     </div>
                   ))}
               </div>
-              <form className="tg-composer" onSubmit={handleSend}>
-                <input
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  placeholder="Write a message…"
-                />
-                <button className="btn primary" type="submit" disabled={busy || !draft.trim()}>
-                  <Send size={16} />
-                  Send
-                </button>
-              </form>
+              {active.canSend ? (
+                <form className="tg-composer" onSubmit={handleSend}>
+                  <input
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    placeholder="Write a message…"
+                    disabled={busy}
+                  />
+                  <button className="btn primary" type="submit" disabled={busy || !draft.trim()}>
+                    <Send size={16} />
+                    Send
+                  </button>
+                </form>
+              ) : (
+                <div className="tg-readonly-bar">
+                  <Lock size={16} />
+                  <div>
+                    <strong>Send not available</strong>
+                    <p>{active.sendBlockedReason || 'You do not have permission to send messages in this chat.'}</p>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>

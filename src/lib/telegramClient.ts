@@ -17,6 +17,80 @@ export type TgDialog = {
   isUser: boolean
   isGroup: boolean
   isChannel: boolean
+  /** True only when current user can post/send messages here */
+  canSend: boolean
+  sendBlockedReason?: string
+}
+
+/** Detect send permission from Telegram entity flags (no extra RPC). */
+export function canSendToEntity(entity: unknown): { canSend: boolean; reason?: string } {
+  if (!entity || typeof entity !== 'object') {
+    return { canSend: false, reason: 'Unknown chat' }
+  }
+
+  const e = entity as {
+    className?: string
+    deleted?: boolean
+    bot?: boolean
+    left?: boolean
+    kicked?: boolean
+    restricted?: boolean
+    creator?: boolean
+    broadcast?: boolean
+    megagroup?: boolean
+    adminRights?: {
+      postMessages?: boolean
+      sendMessages?: boolean
+    } | null
+    bannedRights?: { sendMessages?: boolean } | null
+    defaultBannedRights?: { sendMessages?: boolean } | null
+  }
+
+  const kind = e.className || ''
+
+  if (kind === 'User' || kind === 'UserEmpty') {
+    if (e.deleted) return { canSend: false, reason: 'Deleted account' }
+    return { canSend: true }
+  }
+
+  if (kind === 'Chat' || kind === 'ChatForbidden') {
+    if (kind === 'ChatForbidden' || e.left || e.kicked) {
+      return { canSend: false, reason: 'You cannot send messages in this group' }
+    }
+    return { canSend: true }
+  }
+
+  if (kind === 'Channel' || kind === 'ChannelForbidden') {
+    if (kind === 'ChannelForbidden' || e.left) {
+      return { canSend: false, reason: 'You cannot send messages here' }
+    }
+
+    // Broadcast channel — only admins/creators with post rights
+    if (e.broadcast) {
+      if (e.creator) return { canSend: true }
+      if (e.adminRights?.postMessages) return { canSend: true }
+      return { canSend: false, reason: 'Channel is read-only (no post permission)' }
+    }
+
+    // Supergroup / megagroup
+    if (e.creator) return { canSend: true }
+    if (e.adminRights) {
+      // Admin with explicit ban on send is rare; allow unless bannedRights blocks
+      if (e.bannedRights?.sendMessages) {
+        return { canSend: false, reason: 'Sending is restricted for your account' }
+      }
+      return { canSend: true }
+    }
+    if (e.bannedRights?.sendMessages) {
+      return { canSend: false, reason: 'You are restricted from sending messages' }
+    }
+    if (e.defaultBannedRights?.sendMessages) {
+      return { canSend: false, reason: 'Sending is disabled in this group' }
+    }
+    return { canSend: true }
+  }
+
+  return { canSend: false, reason: 'Cannot send in this chat' }
 }
 
 export type TgMessage = {
@@ -155,6 +229,7 @@ export async function listDialogs(limit = 40): Promise<TgDialog[]> {
     const isChannel = entity?.className === 'Channel'
     const isBroadcast = isChannel && !!(entity as Api.Channel).broadcast
     const isGroup = entity?.className === 'Chat' || (isChannel && !isBroadcast)
+    const send = canSendToEntity(entity)
     return {
       id,
       title,
@@ -163,8 +238,19 @@ export async function listDialogs(limit = 40): Promise<TgDialog[]> {
       isUser: !!isUser,
       isGroup: !!isGroup,
       isChannel: !!isBroadcast,
+      canSend: send.canSend,
+      sendBlockedReason: send.reason,
     }
   })
+}
+
+export async function sendMessage(entity: Api.TypeEntityLike, text: string): Promise<void> {
+  const perm = canSendToEntity(entity)
+  if (!perm.canSend) {
+    throw new Error(perm.reason || 'No permission to send messages in this chat')
+  }
+  const c = await getClient()
+  await c.sendMessage(entity, { message: text })
 }
 
 export async function getMessages(entity: Api.TypeEntityLike, limit = 40): Promise<TgMessage[]> {
@@ -198,11 +284,6 @@ export async function getMessages(entity: Api.TypeEntityLike, limit = 40): Promi
   }
 
   return result.reverse()
-}
-
-export async function sendMessage(entity: Api.TypeEntityLike, text: string): Promise<void> {
-  const c = await getClient()
-  await c.sendMessage(entity, { message: text })
 }
 
 export async function logoutTelegram(): Promise<void> {
