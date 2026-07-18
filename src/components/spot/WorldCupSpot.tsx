@@ -8,7 +8,7 @@ import {
   RefreshCw,
   Trophy,
   Tv2,
-  Youtube,
+  Video,
 } from 'lucide-react'
 import {
   loadWorldCupSpot,
@@ -199,7 +199,7 @@ export function WorldCupSpot() {
           <section className="wc-section">
             <div className="wc-section-head">
               <h3>
-                <Youtube size={16} /> Highlights &amp; free video
+                <Video size={16} /> Highlights &amp; free video
               </h3>
             </div>
             <div className="wc-video-layout">
