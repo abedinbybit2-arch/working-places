@@ -44,12 +44,12 @@ export const workspaces: Workspace[] = [
   },
   {
     id: 4,
-    slug: 'bots',
-    name: 'Bot Factory',
-    short: 'Bots',
-    description: 'Build and monitor automation bots.',
-    status: 'coming_soon',
-    accent: '#34d399',
+    slug: 'facebook-recovery',
+    name: 'Facebook Recovery',
+    short: 'FB Recover',
+    description: 'Official Facebook forgot-password assistant for your own account only.',
+    status: 'live',
+    accent: '#3b82f6',
     icon: 'bot',
   },
   {

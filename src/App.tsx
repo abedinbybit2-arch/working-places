@@ -18,6 +18,10 @@ const TempMailWorkspace = lazy(() =>
   import('./components/mail/TempMailWorkspace').then((m) => ({ default: m.TempMailWorkspace })),
 )
 
+const FacebookRecovery = lazy(() =>
+  import('./components/facebook/FacebookRecovery').then((m) => ({ default: m.FacebookRecovery })),
+)
+
 export default function App() {
   const [activeId, setActiveId] = useState(1)
   const [collapsed, setCollapsed] = useState(false)
@@ -104,6 +108,17 @@ export default function App() {
               }
             >
               <TempMailWorkspace />
+            </Suspense>
+          ) : active.id === 4 ? (
+            <Suspense
+              fallback={
+                <div className="tg-center">
+                  <Loader2 className="spin" size={28} />
+                  <p>Loading Facebook Recovery…</p>
+                </div>
+              }
+            >
+              <FacebookRecovery />
             </Suspense>
           ) : (
             <ComingSoon workspace={active} />

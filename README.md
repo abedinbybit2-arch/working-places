@@ -7,7 +7,8 @@ A modern multi-workspace web app with a collapsible sidebar and **10 Working Pla
 | 1 | **Telegram** — login, read chats, send messages | Live |
 | 2 | **World Cup Spot** — live scores, fixtures, table, official highlights | Live |
 | 3 | **Temp Mail** — disposable inbox, persists after browser refresh | Live |
-| 4–10 | Bots, Cloud, Security, Dev, Finance, CRM, Web | Coming soon |
+| 4 | **Facebook Recovery** — official forgot-password guide (own account only) | Live |
+| 5–10 | Cloud, Security, Dev, Finance, CRM, Web | Coming soon |
 
 ## Features
 
