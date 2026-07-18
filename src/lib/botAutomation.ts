@@ -1,6 +1,6 @@
-/** Telegram group auto-reply config (persisted in browser; worker uses exported JSON). */
+/** Telegram group auto-reply — browser live runner (while site tab is open). */
 
-const STORAGE_KEY = 'wp_tg_bot_auto_v1'
+const STORAGE_KEY = 'wp_tg_bot_auto_v2'
 
 export type MatchMode = 'contains' | 'exact' | 'starts_with' | 'regex'
 
@@ -10,19 +10,29 @@ export type AutoReplyRule = {
   keyword: string
   mode: MatchMode
   reply: string
-  /** case-insensitive match */
   ignoreCase: boolean
+}
+
+export type DetectedGroup = {
+  id: string
+  title: string
+  type: string
+  username?: string
+  /** user enabled auto-reply for this group */
+  enabled: boolean
+  lastSeen: number
 }
 
 export type BotAutomationConfig = {
   botToken: string
   botUsername?: string
-  /** Empty = all groups the bot is in */
-  allowedChatIds: string
+  botId?: number
   onlyGroups: boolean
   replyToMessage: boolean
-  enabled: boolean
+  /** if true, reply in every detected group; if false, only groups with enabled=true */
+  replyAllGroups: boolean
   rules: AutoReplyRule[]
+  groups: DetectedGroup[]
   updatedAt: number
 }
 
@@ -30,10 +40,9 @@ export function defaultConfig(): BotAutomationConfig {
   return {
     botToken: '',
     botUsername: '',
-    allowedChatIds: '',
     onlyGroups: true,
     replyToMessage: true,
-    enabled: true,
+    replyAllGroups: false,
     rules: [
       {
         id: uid(),
@@ -52,6 +61,7 @@ export function defaultConfig(): BotAutomationConfig {
         ignoreCase: true,
       },
     ],
+    groups: [],
     updatedAt: Date.now(),
   }
 }
@@ -63,12 +73,40 @@ function uid() {
 export function loadBotConfig(): BotAutomationConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return defaultConfig()
+    if (!raw) {
+      // migrate v1 if present
+      const v1 = localStorage.getItem('wp_tg_bot_auto_v1')
+      if (v1) {
+        const old = JSON.parse(v1) as Partial<BotAutomationConfig> & { allowedChatIds?: string }
+        const base = defaultConfig()
+        const groups: DetectedGroup[] = []
+        if (old.allowedChatIds) {
+          for (const id of String(old.allowedChatIds).split(/[\s,]+/).filter(Boolean)) {
+            groups.push({
+              id,
+              title: `Chat ${id}`,
+              type: 'supergroup',
+              enabled: true,
+              lastSeen: Date.now(),
+            })
+          }
+        }
+        return {
+          ...base,
+          ...old,
+          rules: Array.isArray(old.rules) ? old.rules : base.rules,
+          groups: groups.length ? groups : base.groups,
+          replyAllGroups: groups.length === 0,
+        }
+      }
+      return defaultConfig()
+    }
     const parsed = JSON.parse(raw) as BotAutomationConfig
     return {
       ...defaultConfig(),
       ...parsed,
       rules: Array.isArray(parsed.rules) ? parsed.rules : defaultConfig().rules,
+      groups: Array.isArray(parsed.groups) ? parsed.groups : [],
     }
   } catch {
     return defaultConfig()
@@ -92,57 +130,94 @@ export function newRule(): AutoReplyRule {
   }
 }
 
-export function exportConfigJson(cfg: BotAutomationConfig) {
-  return JSON.stringify(
-    {
-      botToken: cfg.botToken,
-      allowedChatIds: cfg.allowedChatIds
-        .split(/[\s,]+/)
-        .map((s) => s.trim())
-        .filter(Boolean),
-      onlyGroups: cfg.onlyGroups,
-      replyToMessage: cfg.replyToMessage,
-      enabled: cfg.enabled,
-      rules: cfg.rules
-        .filter((r) => r.enabled && r.keyword.trim() && r.reply.trim())
-        .map((r) => ({
-          keyword: r.keyword,
-          mode: r.mode,
-          reply: r.reply,
-          ignoreCase: r.ignoreCase,
-        })),
-    },
-    null,
-    2,
-  )
+type TgResponse<T> = { ok: boolean; description?: string; result?: T }
+
+/** Call Telegram via same-origin /api/telegram proxy (avoids browser CORS). */
+export async function callTelegram<T = unknown>(
+  token: string,
+  method: string,
+  params: Record<string, unknown> = {},
+): Promise<T> {
+  const res = await fetch('/api/telegram', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: token.trim(), method, params }),
+  })
+  let data: TgResponse<T>
+  try {
+    data = (await res.json()) as TgResponse<T>
+  } catch {
+    throw new Error('Invalid response from API proxy. Deploy on Vercel or run npm run dev.')
+  }
+  if (!data.ok) {
+    throw new Error(data.description || `${method} failed`)
+  }
+  return data.result as T
 }
 
-const TG = 'https://api.telegram.org'
-
-export async function testBotToken(token: string): Promise<{ ok: true; username: string; id: number } | { ok: false; error: string }> {
-  const t = token.trim()
-  if (!t) return { ok: false, error: 'Bot token is empty' }
-  try {
-    // May fail in browser due to CORS — UI will show clear message
-    const res = await fetch(`${TG}/bot${t}/getMe`, { method: 'GET' })
-    const data = (await res.json()) as {
-      ok?: boolean
-      description?: string
-      result?: { username?: string; id?: number }
-    }
-    if (!data.ok || !data.result) {
-      return { ok: false, error: data.description || 'Invalid token' }
-    }
-    return {
-      ok: true,
-      username: data.result.username || 'bot',
-      id: data.result.id || 0,
-    }
-  } catch {
-    return {
-      ok: false,
-      error:
-        'Browser blocked Telegram API (CORS). Token can still work with the Node worker — export config and run npm run bot.',
-    }
+export async function testBotToken(token: string) {
+  const me = await callTelegram<{ username?: string; id?: number }>(token, 'getMe')
+  return {
+    username: me.username || 'bot',
+    id: me.id || 0,
   }
+}
+
+export function matchRule(text: string, rule: AutoReplyRule): boolean {
+  if (!rule.enabled || !rule.keyword.trim() || !rule.reply.trim()) return false
+  let msg = text
+  let key = rule.keyword
+  if (rule.ignoreCase) {
+    msg = msg.toLowerCase()
+    key = key.toLowerCase()
+  }
+  try {
+    if (rule.mode === 'exact') return msg.trim() === key.trim()
+    if (rule.mode === 'starts_with') return msg.startsWith(key)
+    if (rule.mode === 'regex') {
+      return new RegExp(rule.keyword, rule.ignoreCase ? 'i' : '').test(text)
+    }
+    return msg.includes(key)
+  } catch {
+    return false
+  }
+}
+
+export function mergeGroup(
+  groups: DetectedGroup[],
+  chat: { id: number | string; title?: string; type?: string; username?: string },
+  autoEnable = false,
+): DetectedGroup[] {
+  const id = String(chat.id)
+  const existing = groups.find((g) => g.id === id)
+  if (existing) {
+    return groups.map((g) =>
+      g.id === id
+        ? {
+            ...g,
+            title: chat.title || g.title,
+            type: chat.type || g.type,
+            username: chat.username || g.username,
+            lastSeen: Date.now(),
+          }
+        : g,
+    )
+  }
+  return [
+    {
+      id,
+      title: chat.title || `Group ${id}`,
+      type: chat.type || 'group',
+      username: chat.username,
+      enabled: autoEnable,
+      lastSeen: Date.now(),
+    },
+    ...groups,
+  ]
+}
+
+export function shouldReplyInGroup(cfg: BotAutomationConfig, chatId: string): boolean {
+  if (cfg.replyAllGroups) return true
+  const g = cfg.groups.find((x) => x.id === chatId)
+  return !!g?.enabled
 }

@@ -13,11 +13,15 @@ A modern multi-workspace web app with a collapsible sidebar and **10 Working Pla
 
 ### Telegram bot auto-reply (WP05)
 
+Works **in the browser while the website tab is open** (no separate bot server).
+
 1. Create bot with [@BotFather](https://t.me/BotFather), copy token  
 2. Add bot to your group; `/setprivacy` → **Disable**  
-3. Open **Bot Auto** workspace → paste token → add keyword/reply rules → **Save**  
-4. **Export JSON** as `bot-config.json` in project root  
-5. Run worker: `npm run bot` (keep process running)
+3. Open **Bot Auto** → paste token → **Start auto-reply**  
+4. Groups appear automatically → enable them → set keyword rules  
+5. Keep the tab open on PC/mobile — close tab = stop  
+
+Optional offline worker still available: `npm run bot` + `bot-config.json`
 
 ## Features
 

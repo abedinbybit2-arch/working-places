@@ -14,6 +14,60 @@ export default defineConfig({
         process: true,
       },
     }),
+    {
+      name: 'telegram-bot-api-proxy',
+      configureServer(server) {
+        server.middlewares.use('/api/telegram', (req, res, next) => {
+          if (req.method === 'OPTIONS') {
+            res.statusCode = 204
+            res.end()
+            return
+          }
+          if (req.method !== 'POST') {
+            next()
+            return
+          }
+          const chunks: Buffer[] = []
+          req.on('data', (c) => chunks.push(Buffer.from(c)))
+          req.on('end', async () => {
+            try {
+              const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as {
+                token?: string
+                method?: string
+                params?: Record<string, unknown>
+              }
+              const token = String(body.token || '').trim()
+              const method = String(body.method || '').trim()
+              const params = body.params || {}
+              if (!token || !method) {
+                res.statusCode = 400
+                res.setHeader('Content-Type', 'application/json')
+                res.end(JSON.stringify({ ok: false, description: 'token and method required' }))
+                return
+              }
+              const tgRes = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(params),
+              })
+              const data = await tgRes.text()
+              res.statusCode = 200
+              res.setHeader('Content-Type', 'application/json')
+              res.end(data)
+            } catch (e) {
+              res.statusCode = 500
+              res.setHeader('Content-Type', 'application/json')
+              res.end(
+                JSON.stringify({
+                  ok: false,
+                  description: e instanceof Error ? e.message : 'proxy error',
+                }),
+              )
+            }
+          })
+        })
+      },
+    },
   ],
   resolve: {
     alias: {
