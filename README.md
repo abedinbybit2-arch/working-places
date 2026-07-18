@@ -5,7 +5,8 @@ A modern multi-workspace web app with a collapsible sidebar and **10 Working Pla
 | # | Workspace | Status |
 |---|-----------|--------|
 | 1 | **Telegram** — login, read chats, send messages | Live |
-| 2–10 | Analytics, Mail, Bots, Cloud, Security, Dev, Finance, CRM, Web | Coming soon |
+| 2 | **World Cup Spot** — live scores, fixtures, table, official highlights | Live |
+| 3–10 | Mail, Bots, Cloud, Security, Dev, Finance, CRM, Web | Coming soon |
 
 ## Features
 

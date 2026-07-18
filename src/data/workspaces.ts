@@ -24,12 +24,12 @@ export const workspaces: Workspace[] = [
   },
   {
     id: 2,
-    slug: 'analytics',
-    name: 'Analytics Desk',
-    short: 'Analytics',
-    description: 'Live metrics, funnels, and performance dashboards.',
-    status: 'coming_soon',
-    accent: '#818cf8',
+    slug: 'spot',
+    name: 'World Cup Spot',
+    short: 'Spot',
+    description: 'FIFA World Cup live scores, fixtures, table, and official free highlights.',
+    status: 'live',
+    accent: '#fbbf24',
     icon: 'chart',
   },
   {

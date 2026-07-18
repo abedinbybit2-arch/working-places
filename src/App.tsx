@@ -10,6 +10,10 @@ const TelegramWorkspace = lazy(() =>
   import('./components/telegram/TelegramWorkspace').then((m) => ({ default: m.TelegramWorkspace })),
 )
 
+const WorldCupSpot = lazy(() =>
+  import('./components/spot/WorldCupSpot').then((m) => ({ default: m.WorldCupSpot })),
+)
+
 export default function App() {
   const [activeId, setActiveId] = useState(1)
   const [collapsed, setCollapsed] = useState(false)
@@ -74,6 +78,17 @@ export default function App() {
               }
             >
               <TelegramWorkspace />
+            </Suspense>
+          ) : active.id === 2 ? (
+            <Suspense
+              fallback={
+                <div className="tg-center">
+                  <Loader2 className="spin" size={28} />
+                  <p>Loading World Cup Spot…</p>
+                </div>
+              }
+            >
+              <WorldCupSpot />
             </Suspense>
           ) : (
             <ComingSoon workspace={active} />
