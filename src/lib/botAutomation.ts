@@ -18,7 +18,6 @@ export type DetectedGroup = {
   title: string
   type: string
   username?: string
-  /** user enabled auto-reply for this group */
   enabled: boolean
   lastSeen: number
 }
@@ -29,7 +28,7 @@ export type BotAutomationConfig = {
   botId?: number
   onlyGroups: boolean
   replyToMessage: boolean
-  /** if true, reply in every detected group; if false, only groups with enabled=true */
+  /** if true, reply in every group the bot sees */
   replyAllGroups: boolean
   rules: AutoReplyRule[]
   groups: DetectedGroup[]
@@ -42,7 +41,7 @@ export function defaultConfig(): BotAutomationConfig {
     botUsername: '',
     onlyGroups: true,
     replyToMessage: true,
-    replyAllGroups: false,
+    replyAllGroups: true,
     rules: [
       {
         id: uid(),
@@ -55,9 +54,9 @@ export function defaultConfig(): BotAutomationConfig {
       {
         id: uid(),
         enabled: true,
-        keyword: 'price',
+        keyword: 'hi',
         mode: 'contains',
-        reply: 'Please check pinned message for prices.',
+        reply: 'Hello! How can I help you?',
         ignoreCase: true,
       },
     ],
@@ -74,7 +73,6 @@ export function loadBotConfig(): BotAutomationConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) {
-      // migrate v1 if present
       const v1 = localStorage.getItem('wp_tg_bot_auto_v1')
       if (v1) {
         const old = JSON.parse(v1) as Partial<BotAutomationConfig> & { allowedChatIds?: string }
@@ -96,7 +94,7 @@ export function loadBotConfig(): BotAutomationConfig {
           ...old,
           rules: Array.isArray(old.rules) ? old.rules : base.rules,
           groups: groups.length ? groups : base.groups,
-          replyAllGroups: groups.length === 0,
+          replyAllGroups: true,
         }
       }
       return defaultConfig()
@@ -107,6 +105,8 @@ export function loadBotConfig(): BotAutomationConfig {
       ...parsed,
       rules: Array.isArray(parsed.rules) ? parsed.rules : defaultConfig().rules,
       groups: Array.isArray(parsed.groups) ? parsed.groups : [],
+      // prefer working defaults if missing
+      replyAllGroups: parsed.replyAllGroups !== false,
     }
   } catch {
     return defaultConfig()
@@ -114,6 +114,12 @@ export function loadBotConfig(): BotAutomationConfig {
 }
 
 export function saveBotConfig(cfg: BotAutomationConfig) {
+  const next = { ...cfg, updatedAt: Date.now() }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+  return next
+}
+
+export function persistConfigSync(cfg: BotAutomationConfig) {
   const next = { ...cfg, updatedAt: Date.now() }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
   return next
@@ -132,7 +138,6 @@ export function newRule(): AutoReplyRule {
 
 type TgResponse<T> = { ok: boolean; description?: string; result?: T }
 
-/** Call Telegram via same-origin /api/telegram proxy (avoids browser CORS). */
 export async function callTelegram<T = unknown>(
   token: string,
   method: string,
@@ -147,7 +152,10 @@ export async function callTelegram<T = unknown>(
   try {
     data = (await res.json()) as TgResponse<T>
   } catch {
-    throw new Error('Invalid response from API proxy. Deploy on Vercel or run npm run dev.')
+    throw new Error('API proxy failed. Use Vercel deploy or npm run dev (not opening dist as file).')
+  }
+  if (!res.ok && !data?.ok) {
+    throw new Error(data?.description || `HTTP ${res.status}`)
   }
   if (!data.ok) {
     throw new Error(data.description || `${method} failed`)
@@ -183,10 +191,14 @@ export function matchRule(text: string, rule: AutoReplyRule): boolean {
   }
 }
 
+export function isGroupChat(type?: string) {
+  return type === 'group' || type === 'supergroup'
+}
+
 export function mergeGroup(
   groups: DetectedGroup[],
   chat: { id: number | string; title?: string; type?: string; username?: string },
-  autoEnable = false,
+  autoEnable = true,
 ): DetectedGroup[] {
   const id = String(chat.id)
   const existing = groups.find((g) => g.id === id)
@@ -199,6 +211,8 @@ export function mergeGroup(
             type: chat.type || g.type,
             username: chat.username || g.username,
             lastSeen: Date.now(),
+            // once seen again, keep previous enabled flag
+            enabled: g.enabled,
           }
         : g,
     )
@@ -219,5 +233,7 @@ export function mergeGroup(
 export function shouldReplyInGroup(cfg: BotAutomationConfig, chatId: string): boolean {
   if (cfg.replyAllGroups) return true
   const g = cfg.groups.find((x) => x.id === chatId)
-  return !!g?.enabled
+  // unknown group: allow if replyAllGroups already handled; else require enabled
+  if (!g) return false
+  return g.enabled
 }

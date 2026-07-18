@@ -14,10 +14,12 @@ import {
 } from 'lucide-react'
 import {
   callTelegram,
+  isGroupChat,
   loadBotConfig,
   matchRule,
   mergeGroup,
   newRule,
+  persistConfigSync,
   saveBotConfig,
   shouldReplyInGroup,
   testBotToken,
@@ -30,19 +32,40 @@ import './TelegramBotAutomation.css'
 
 type LogLine = { id: string; t: number; text: string; kind: 'info' | 'ok' | 'err' }
 
+type TgChat = { id: number; title?: string; type?: string; username?: string }
+type TgMessage = {
+  message_id: number
+  text?: string
+  caption?: string
+  from?: { is_bot?: boolean; username?: string; first_name?: string }
+  chat?: TgChat
+}
+type TgUpdate = {
+  update_id: number
+  message?: TgMessage
+  edited_message?: TgMessage
+  channel_post?: TgMessage
+  my_chat_member?: {
+    chat?: TgChat
+    new_chat_member?: { status?: string }
+  }
+}
+
 export function TelegramBotAutomation() {
   const [cfg, setCfg] = useState<BotAutomationConfig>(() => loadBotConfig())
   const [running, setRunning] = useState(false)
   const [busy, setBusy] = useState(false)
   const [savedFlash, setSavedFlash] = useState(false)
-  const [status, setStatus] = useState('Idle — start auto-reply while this page stays open')
+  const [status, setStatus] = useState('Idle — press Start auto-reply')
   const [logs, setLogs] = useState<LogLine[]>([])
   const [error, setError] = useState('')
+  const [manualId, setManualId] = useState('')
 
   const cfgRef = useRef(cfg)
   const runningRef = useRef(false)
   const offsetRef = useRef(0)
   const loopGen = useRef(0)
+  const statsRef = useRef({ updates: 0, messages: 0, replies: 0 })
 
   useEffect(() => {
     cfgRef.current = cfg
@@ -50,78 +73,86 @@ export function TelegramBotAutomation() {
 
   const log = useCallback((text: string, kind: LogLine['kind'] = 'info') => {
     setLogs((prev) =>
-      [{ id: `${Date.now()}_${Math.random()}`, t: Date.now(), text, kind }, ...prev].slice(0, 40),
+      [{ id: `${Date.now()}_${Math.random()}`, t: Date.now(), text, kind }, ...prev].slice(0, 50),
     )
   }, [])
 
-  function persist(next: BotAutomationConfig) {
-    const saved = saveBotConfig(next)
-    setCfg(saved)
+  function commit(next: BotAutomationConfig) {
+    const saved = persistConfigSync(next)
     cfgRef.current = saved
+    setCfg(saved)
     return saved
   }
 
   function update(partial: Partial<BotAutomationConfig>) {
-    setCfg((c) => {
-      const next = { ...c, ...partial }
-      cfgRef.current = next
-      return next
-    })
+    const next = { ...cfgRef.current, ...partial }
+    cfgRef.current = next
+    setCfg(next)
   }
 
   function handleSave() {
-    persist(cfg)
+    saveBotConfig(cfgRef.current)
+    setCfg({ ...cfgRef.current })
     setSavedFlash(true)
     window.setTimeout(() => setSavedFlash(false), 1200)
   }
 
   function updateRule(id: string, partial: Partial<AutoReplyRule>) {
-    setCfg((c) => {
-      const next = { ...c, rules: c.rules.map((r) => (r.id === id ? { ...r, ...partial } : r)) }
-      cfgRef.current = next
-      return next
-    })
+    const next = {
+      ...cfgRef.current,
+      rules: cfgRef.current.rules.map((r) => (r.id === id ? { ...r, ...partial } : r)),
+    }
+    commit(next)
   }
 
   function addRule() {
-    setCfg((c) => {
-      const next = { ...c, rules: [...c.rules, newRule()] }
-      cfgRef.current = next
-      return next
-    })
+    commit({ ...cfgRef.current, rules: [...cfgRef.current.rules, newRule()] })
   }
 
   function removeRule(id: string) {
-    setCfg((c) => {
-      const next = { ...c, rules: c.rules.filter((r) => r.id !== id) }
-      cfgRef.current = next
-      return next
-    })
+    commit({ ...cfgRef.current, rules: cfgRef.current.rules.filter((r) => r.id !== id) })
   }
 
   function toggleGroup(id: string, enabled: boolean) {
-    setCfg((c) => {
-      const next = {
-        ...c,
-        groups: c.groups.map((g) => (g.id === id ? { ...g, enabled } : g)),
-      }
-      cfgRef.current = next
-      localStorage.setItem('wp_tg_bot_auto_v2', JSON.stringify({ ...next, updatedAt: Date.now() }))
-      return next
+    commit({
+      ...cfgRef.current,
+      groups: cfgRef.current.groups.map((g) => (g.id === id ? { ...g, enabled } : g)),
     })
+  }
+
+  function enableAllGroups() {
+    commit({
+      ...cfgRef.current,
+      replyAllGroups: true,
+      groups: cfgRef.current.groups.map((g) => ({ ...g, enabled: true })),
+    })
+    log('All groups enabled', 'ok')
+  }
+
+  function addManualGroup() {
+    const id = manualId.trim()
+    if (!id) return
+    const groups = mergeGroup(
+      cfgRef.current.groups,
+      { id, title: `Group ${id}`, type: 'supergroup' },
+      true,
+    )
+    commit({ ...cfgRef.current, groups })
+    setManualId('')
+    log(`Manual group added: ${id}`, 'ok')
   }
 
   async function handleConnect() {
     setBusy(true)
     setError('')
     try {
-      const me = await testBotToken(cfg.botToken)
-      const next = persist({ ...cfg, botUsername: me.username, botId: me.id })
+      const me = await testBotToken(cfgRef.current.botToken)
+      commit({ ...cfgRef.current, botUsername: me.username, botId: me.id })
       setStatus(`Connected @${me.username}`)
       log(`Connected as @${me.username}`, 'ok')
-      // Drop old webhook so getUpdates works
       try {
-        await callTelegram(next.botToken, 'deleteWebhook', { drop_pending_updates: false })
+        await callTelegram(cfgRef.current.botToken, 'deleteWebhook', { drop_pending_updates: false })
+        log('Webhook cleared (getUpdates ready)', 'info')
       } catch {
         /* ignore */
       }
@@ -135,67 +166,71 @@ export function TelegramBotAutomation() {
   }
 
   const processUpdate = useCallback(
-    async (update: {
-      update_id: number
-      message?: {
-        message_id: number
-        text?: string
-        caption?: string
-        from?: { is_bot?: boolean; username?: string }
-        chat?: { id: number; title?: string; type?: string; username?: string }
-      }
-      my_chat_member?: {
-        chat?: { id: number; title?: string; type?: string; username?: string }
-      }
-    }) => {
-      const c = cfgRef.current
-      const chatFromMember = update.my_chat_member?.chat
-      if (chatFromMember && (chatFromMember.type === 'group' || chatFromMember.type === 'supergroup')) {
-        setCfg((prev) => {
-          const groups = mergeGroup(prev.groups, chatFromMember, true)
-          const next = { ...prev, groups }
-          cfgRef.current = next
-          localStorage.setItem('wp_tg_bot_auto_v2', JSON.stringify({ ...next, updatedAt: Date.now() }))
-          return next
-        })
-        log(`Group detected: ${chatFromMember.title || chatFromMember.id}`, 'ok')
+    async (update: TgUpdate) => {
+      statsRef.current.updates += 1
+      let c = cfgRef.current
+
+      // Bot added / status change in group
+      const memberChat = update.my_chat_member?.chat
+      if (memberChat && isGroupChat(memberChat.type)) {
+        const groups = mergeGroup(c.groups, memberChat, true)
+        c = commit({ ...c, groups })
+        log(`Group detected: ${memberChat.title || memberChat.id}`, 'ok')
       }
 
-      const msg = update.message
+      const msg = update.message || update.edited_message
       if (!msg?.chat) return
-      const chat = msg.chat
-      const isGroup = chat.type === 'group' || chat.type === 'supergroup'
-      if (c.onlyGroups && !isGroup) return
 
+      const chat = msg.chat
+      const isGroup = isGroupChat(chat.type)
+
+      // Always track groups we see
       if (isGroup) {
-        setCfg((prev) => {
-          const groups = mergeGroup(prev.groups, chat, false)
-          const next = { ...prev, groups }
-          cfgRef.current = next
-          localStorage.setItem('wp_tg_bot_auto_v2', JSON.stringify({ ...next, updatedAt: Date.now() }))
-          return next
-        })
+        const groups = mergeGroup(c.groups, chat, true)
+        c = commit({ ...c, groups })
+      }
+
+      if (c.onlyGroups && !isGroup) {
+        log(`Private msg ignored (groups only): ${msg.text || ''}`, 'info')
+        return
       }
 
       if (msg.from?.is_bot) return
-      const text = msg.text || msg.caption || ''
-      if (!text.trim()) return
 
+      const text = (msg.text || msg.caption || '').trim()
+      if (!text) return
+
+      statsRef.current.messages += 1
       const chatId = String(chat.id)
-      // refresh shouldReply from latest
-      const latest = cfgRef.current
-      if (!shouldReplyInGroup(latest, chatId)) return
+      log(`Msg in ${chat.title || chatId}: ${text.slice(0, 60)}`, 'info')
 
-      for (const rule of latest.rules) {
+      // Sync read of config after commit
+      c = cfgRef.current
+      if (!shouldReplyInGroup(c, chatId)) {
+        log(`Skip — group ${chatId} not enabled (turn on “ALL groups” or enable checkbox)`, 'err')
+        return
+      }
+
+      let matched = false
+      for (const rule of c.rules) {
         if (!matchRule(text, rule)) continue
+        matched = true
         const params: Record<string, unknown> = {
           chat_id: chat.id,
           text: rule.reply,
         }
-        if (latest.replyToMessage) params.reply_to_message_id = msg.message_id
-        await callTelegram(latest.botToken, 'sendMessage', params)
-        log(`Replied in "${chat.title || chatId}" → ${rule.keyword}`, 'ok')
+        if (c.replyToMessage) params.reply_to_message_id = msg.message_id
+        try {
+          await callTelegram(c.botToken, 'sendMessage', params)
+          statsRef.current.replies += 1
+          log(`✅ Replied in "${chat.title || chatId}" (rule: ${rule.keyword})`, 'ok')
+        } catch (e) {
+          log(`Send failed: ${e instanceof Error ? e.message : String(e)}`, 'err')
+        }
         break
+      }
+      if (!matched) {
+        log(`No rule matched for: ${text.slice(0, 40)}`, 'info')
       }
     },
     [log],
@@ -205,7 +240,7 @@ export function TelegramBotAutomation() {
     runningRef.current = false
     loopGen.current += 1
     setRunning(false)
-    setStatus('Stopped — open this page again and press Start to resume')
+    setStatus('Stopped')
     log('Auto-reply stopped', 'info')
   }, [log])
 
@@ -215,27 +250,25 @@ export function TelegramBotAutomation() {
       setError('Enter bot token first')
       return
     }
+    // Ensure reply-all for reliability
+    if (!cfgRef.current.replyAllGroups && cfgRef.current.groups.every((g) => !g.enabled)) {
+      commit({ ...cfgRef.current, replyAllGroups: true })
+      log('Enabled “ALL groups” so replies work immediately', 'info')
+    }
 
     setBusy(true)
     try {
       const me = await testBotToken(cfgRef.current.botToken)
-      persist({ ...cfgRef.current, botUsername: me.username, botId: me.id })
-      await callTelegram(cfgRef.current.botToken, 'deleteWebhook', { drop_pending_updates: false })
-      // skip backlog once
-      try {
-        const skipped = await callTelegram<{ update_id: number }[]>(cfgRef.current.botToken, 'getUpdates', {
-          offset: -1,
-          timeout: 0,
-          limit: 1,
-        })
-        if (skipped?.[0]?.update_id) offsetRef.current = skipped[0].update_id + 1
-      } catch {
-        offsetRef.current = 0
-      }
+      commit({ ...cfgRef.current, botUsername: me.username, botId: me.id })
+      await callTelegram(cfgRef.current.botToken, 'deleteWebhook', { drop_pending_updates: true })
+      offsetRef.current = 0
+      statsRef.current = { updates: 0, messages: 0, replies: 0 }
+      log(`Bot @${me.username} ready. Privacy must be OFF in BotFather.`, 'ok')
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       setError(msg)
       setBusy(false)
+      log(msg, 'err')
       return
     }
     setBusy(false)
@@ -243,81 +276,55 @@ export function TelegramBotAutomation() {
     const gen = ++loopGen.current
     runningRef.current = true
     setRunning(true)
-    setStatus(`Live @${cfgRef.current.botUsername || 'bot'} — keep this tab open`)
-    log('Auto-reply started (works while this website tab stays open)', 'ok')
+    setStatus(`Live @${cfgRef.current.botUsername || 'bot'} — keep tab open`)
+    log('Listening for group messages…', 'ok')
 
     ;(async () => {
       while (runningRef.current && loopGen.current === gen) {
         if (typeof document !== 'undefined' && document.hidden) {
-          await new Promise((r) => setTimeout(r, 1500))
+          await new Promise((r) => setTimeout(r, 1200))
           continue
         }
         try {
-          // short poll — works with Vercel proxy timeouts
-          const updates = await callTelegram<
-            {
-              update_id: number
-              message?: {
-                message_id: number
-                text?: string
-                caption?: string
-                from?: { is_bot?: boolean }
-                chat?: { id: number; title?: string; type?: string; username?: string }
-              }
-              my_chat_member?: {
-                chat?: { id: number; title?: string; type?: string; username?: string }
-              }
-            }[]
-          >(cfgRef.current.botToken, 'getUpdates', {
+          const updates = await callTelegram<TgUpdate[]>(cfgRef.current.botToken, 'getUpdates', {
             offset: offsetRef.current,
             timeout: 0,
             limit: 50,
-            allowed_updates: ['message', 'my_chat_member'],
+            allowed_updates: ['message', 'edited_message', 'my_chat_member'],
           })
 
-          for (const u of updates || []) {
-            offsetRef.current = u.update_id + 1
-            try {
-              await processUpdate(u)
-            } catch (e) {
-              log(e instanceof Error ? e.message : String(e), 'err')
+          if (updates?.length) {
+            for (const u of updates) {
+              offsetRef.current = u.update_id + 1
+              try {
+                await processUpdate(u)
+              } catch (e) {
+                log(e instanceof Error ? e.message : String(e), 'err')
+              }
             }
           }
+
+          const s = statsRef.current
           setStatus(
-            `Live @${cfgRef.current.botUsername || 'bot'} · groups: ${cfgRef.current.groups.length} · ${new Date().toLocaleTimeString()}`,
+            `Live @${cfgRef.current.botUsername || 'bot'} · groups ${cfgRef.current.groups.length} · msgs ${s.messages} · replies ${s.replies} · ${new Date().toLocaleTimeString()}`,
           )
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e)
           log(msg, 'err')
-          setStatus(`Retrying… ${msg}`)
-          await new Promise((r) => setTimeout(r, 2500))
+          setStatus(`Error — retrying… ${msg}`)
+          await new Promise((r) => setTimeout(r, 2000))
         }
-        // small delay between short polls
-        await new Promise((r) => setTimeout(r, 1200))
+        await new Promise((r) => setTimeout(r, 800))
       }
     })()
   }, [log, processUpdate])
 
-  // Stop when tab hidden for long? User wants while open — pause when hidden to save, resume when visible
   useEffect(() => {
-    const onVis = () => {
-      if (document.hidden && runningRef.current) {
-        setStatus('Tab hidden — polling paused (open tab again to continue)')
-      }
-    }
-    document.addEventListener('visibilitychange', onVis)
     return () => {
-      document.removeEventListener('visibilitychange', onVis)
       runningRef.current = false
       loopGen.current += 1
     }
   }, [])
-
-  // Pause polling loop body when hidden by checking in loop - add check
-  useEffect(() => {
-    if (!running) return
-    // re-bind: when visible and was running, status update only
-  }, [running])
 
   return (
     <div className="ba-wrap">
@@ -326,11 +333,10 @@ export function TelegramBotAutomation() {
           <div className="ba-kicker">
             <Bot size={14} /> WP 05 · Telegram Bot Automation
           </div>
-          <h2>Group auto-reply (no extra server)</h2>
+          <h2>Group auto-reply (live in browser)</h2>
           <p>
-            Paste bot token → bot <strong>detects groups automatically</strong> → enable groups →
-            custom auto-reply runs <strong>while this website tab is open</strong> on PC or mobile.
-            Close the tab = stop. No separate Node process required.
+            Token → Start → groups auto-detect → keyword reply. Works while this tab is open. No
+            extra server process.
           </p>
         </div>
         <div className="ba-hero-actions">
@@ -360,10 +366,18 @@ export function TelegramBotAutomation() {
       <div className="ba-warn">
         <AlertTriangle size={16} />
         <div>
-          <strong>Setup:</strong> @BotFather → create bot → token. Add bot to group. Send{' '}
-          <code>/setprivacy</code> → <strong>Disable</strong> so bot can read group messages. Send any
-          message in the group (or add bot) so it appears in Detected groups. Keep this page open for
-          auto-reply.
+          <strong>If group not working — check these:</strong>
+          <br />
+          1) BotFather → <code>/setprivacy</code> → <strong>Disable</strong> (required)
+          <br />
+          2) Bot must be <strong>member</strong> of the group
+          <br />
+          3) Press <strong>Start auto-reply</strong> and keep this page open
+          <br />
+          4) In group type a rule word e.g. <code>hello</code> or <code>hi</code>
+          <br />
+          5) Deploy on <strong>Vercel</strong> (needs <code>/api/telegram</code>) or local{' '}
+          <code>npm run dev</code>
         </div>
       </div>
 
@@ -409,7 +423,7 @@ export function TelegramBotAutomation() {
               checked={cfg.replyAllGroups}
               onChange={(e) => update({ replyAllGroups: e.target.checked })}
             />
-            Auto-reply in ALL detected groups (or pick below)
+            Auto-reply in ALL groups (recommended)
           </label>
         </div>
         <button className="btn ghost" type="button" onClick={() => void handleConnect()} disabled={busy}>
@@ -423,17 +437,32 @@ export function TelegramBotAutomation() {
           <h3>
             <Users size={16} /> Detected groups
           </h3>
-          <span className="ba-hint">{cfg.groups.length} found</span>
+          <div className="ba-actions">
+            <button className="btn ghost" type="button" onClick={enableAllGroups}>
+              Enable all
+            </button>
+            <span className="ba-hint">{cfg.groups.length} found</span>
+          </div>
         </div>
         <p className="ba-sub">
-          Groups appear automatically when the bot is added or someone messages while auto-reply is
-          running. Enable the groups you want.
+          Start auto-reply, then send any message in the group (or add the bot). Groups show here
+          automatically.
         </p>
+        <div className="ba-row">
+          <label className="ba-field grow">
+            <span>Or paste group chat id manually</span>
+            <input
+              value={manualId}
+              onChange={(e) => setManualId(e.target.value)}
+              placeholder="-100xxxxxxxxxx"
+            />
+          </label>
+          <button className="btn ghost" type="button" onClick={addManualGroup} style={{ alignSelf: 'end' }}>
+            Add
+          </button>
+        </div>
         {cfg.groups.length === 0 ? (
-          <div className="ba-empty">
-            No groups yet. Start auto-reply, then write something in your Telegram group (or re-add
-            the bot).
-          </div>
+          <div className="ba-empty">No groups yet — Start + message the group.</div>
         ) : (
           <div className="ba-groups">
             {cfg.groups.map((g: DetectedGroup) => (
@@ -447,8 +476,9 @@ export function TelegramBotAutomation() {
                 <div>
                   <strong>{g.title}</strong>
                   <span>
-                    {g.type} · id {g.id}
+                    {g.type} · {g.id}
                     {g.username ? ` · @${g.username}` : ''}
+                    {g.enabled || cfg.replyAllGroups ? ' · ACTIVE' : ' · off'}
                   </span>
                 </div>
               </label>
@@ -503,7 +533,7 @@ export function TelegramBotAutomation() {
                 <input
                   value={r.keyword}
                   onChange={(e) => updateRule(r.id, { keyword: e.target.value })}
-                  placeholder="keyword"
+                  placeholder="hello"
                 />
               </label>
               <label className="ba-field">
@@ -512,7 +542,6 @@ export function TelegramBotAutomation() {
                   value={r.reply}
                   onChange={(e) => updateRule(r.id, { reply: e.target.value })}
                   rows={2}
-                  placeholder="Auto reply text"
                 />
               </label>
             </div>
@@ -523,7 +552,7 @@ export function TelegramBotAutomation() {
       <section className="ba-card">
         <h3>Activity log</h3>
         <div className="ba-logs">
-          {logs.length === 0 && <div className="ba-empty">No activity yet</div>}
+          {logs.length === 0 && <div className="ba-empty">No activity yet — press Start</div>}
           {logs.map((l) => (
             <div key={l.id} className={`ba-log ${l.kind}`}>
               <time>{new Date(l.t).toLocaleTimeString()}</time>
